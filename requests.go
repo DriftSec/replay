@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,7 +11,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 )
 
@@ -239,88 +237,5 @@ func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
 		}
 	}
 
-	// ! need to deal with other content types, i.e. JSON, XML
-	if conf.ContentType == "application/xml" {
-		ParseBodyXML(&conf)
-	}
-
-	if conf.ContentType == "application/json" {
-		ParseBodyJSON(&conf)
-	}
-
-	if strings.HasPrefix(conf.ContentType, "multipart/form-data") {
-		err := ParseBodyMultiPart(&conf)
-		if err != nil {
-			return &RequestConfig{}, err
-		}
-
-	}
-
 	return &conf, nil
-}
-
-func ParseBodyXML(conf *RequestConfig) {
-
-}
-
-func ParseBodyJSON(conf *RequestConfig) {
-
-}
-
-func ParseBodyMultiPart(conf *RequestConfig) error {
-	//multipart/form-data; boundary=------------------------948a6137eef50079
-	tmp := strings.TrimSpace(conf.ContentType)
-	parts := strings.Split(tmp, ";")
-	Sections := []map[string]string{}
-	if len(parts) != 2 {
-		return errors.New("failed to parse form boundry")
-	}
-	boundry := strings.ReplaceAll(strings.Split(parts[1], "=")[1], "-", "")
-
-	tmpBody := conf.RawBody
-
-	end := regexp.MustCompile("[-]+" + boundry + "--$")
-	tmpBody = end.ReplaceAllString(tmpBody, "")
-
-	re := regexp.MustCompile("[-]+" + boundry + "\n")
-	split := re.Split(tmpBody, -1)
-
-	for _, i := range split {
-		if len(i) == 0 {
-			continue
-		}
-		Sections = append(Sections, mapBoundry(i))
-	}
-	conf.MultiPart = Sections
-	return nil
-
-}
-
-func mapBoundry(section string) map[string]string {
-	ret := make(map[string]string)
-	// data := []string{}
-	parts := strings.SplitN(section, "\n\n", 2)
-
-	header := parts[0]
-	body := parts[1]
-	ret["body"] = body
-
-	scanner := bufio.NewScanner(strings.NewReader(header))
-	for scanner.Scan() {
-		line := scanner.Text()
-		pv := strings.SplitN(line, ":", 2)
-		if strings.Contains(pv[1], "; ") {
-			tmp := strings.Split(pv[1], "; ")
-			ret[pv[0]] = tmp[0]
-			for _, f := range tmp[1:] {
-				fpv := strings.SplitN(f, "=", 2)
-				ret[strings.TrimLeft(fpv[0], " ")] = fpv[1]
-			}
-		} else {
-			ret[strings.TrimLeft(pv[0], " ")] = pv[1]
-		}
-
-	}
-
-	return ret
 }
