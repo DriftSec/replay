@@ -4,10 +4,26 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 )
+
+type ReplacerSlice []string
+
+var Replacers ReplacerSlice
+
+func (i *ReplacerSlice) String() string {
+	return fmt.Sprintf("%s", *i)
+}
+
+func (i *ReplacerSlice) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
 
 func main() {
 
+	flag.Var(&Replacers, "R", "Replace sting in request file. Use multiple times (-R infile=./test.txt will replace {{infile}} with ./test.txt)")
 	https := flag.Bool("https", false, "HTTPS request, defaults to HTTP")
 	reqFile := flag.String("r", "", "The request file to replay")
 
@@ -19,6 +35,19 @@ func main() {
 		fmt.Println()
 		flag.Usage()
 	}
+	repl := make(map[string]string)
+	if len(Replacers) > 0 {
+		for _, r := range Replacers {
+			parts := strings.SplitN(r, "=", 2)
+			if len(parts) != 2 {
+				fmt.Println("[ERROR] Bad Replacement string:", r)
+				os.Exit(1)
+			}
+			srch := parts[0]
+			rep := parts[1]
+			repl[srch] = rep
+		}
+	}
 
 	var scheme string
 	if *https {
@@ -26,7 +55,8 @@ func main() {
 	} else {
 		scheme = "http"
 	}
-	raw, err := ReadRawRequest(*reqFile, scheme)
+
+	raw, err := ReadRawRequest(*reqFile, scheme, repl)
 	if err != nil {
 		log.Fatal(err)
 	}

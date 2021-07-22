@@ -139,7 +139,7 @@ func DumpResponse(resp *http.Response) {
 
 }
 
-func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
+func ReadRawRequest(path string, scheme string, repl map[string]string) (*RequestConfig, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return &RequestConfig{}, fmt.Errorf("could not open request file: %s", err)
@@ -148,10 +148,12 @@ func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
 
 	r := bufio.NewReader(file)
 
-	s, err := r.ReadString('\n')
+	s, err :=r.ReadString('\n')
+	s = ReplaceVars(s,repl)
 	if err != nil {
 		return &RequestConfig{}, fmt.Errorf("could not read request: %s", err)
 	}
+
 	parts := strings.Split(s, " ")
 	if len(parts) < 3 {
 		return &RequestConfig{}, fmt.Errorf("malformed request supplied")
@@ -169,6 +171,7 @@ func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
 	for {
 		line, err := r.ReadString('\n')
 		line = strings.TrimSpace(line)
+		line = ReplaceVars(line,repl)
 
 		if err != nil || line == "" {
 			break
@@ -215,6 +218,7 @@ func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
 
 	// Set the request body
 	b, err := ioutil.ReadAll(r)
+	b = []byte(ReplaceVars(string(b),repl))
 	if err != nil {
 		return &RequestConfig{}, fmt.Errorf("could not read request body: %s", err)
 	}
@@ -238,4 +242,13 @@ func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
 	}
 
 	return &conf, nil
+}
+
+func ReplaceVars(content string, repl map[string]string) string {
+	var ret string
+	ret = content
+	for k, v := range repl {
+		ret = strings.ReplaceAll(ret, "{{"+k+"}}", v)
+	}
+	return ret
 }
