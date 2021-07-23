@@ -1,17 +1,21 @@
-## replay burp requests from a file
+## Command line burp repeater/intruder type thingy
+ - Replays burp requests from a file
+ - Add variables that can be replaced for scripting quick exploits
+
+### Usage
 ```
 Usage of replay:
   -R value
         Replace sting in request file. Use multiple times (-R infile=./test.txt will replace {{infile}} with ./test.txt)
   -https
         HTTPS request, defaults to HTTP
-  -r string
+  -file string (Required)
         The request file to replay
 ```
 
 
-# string replacing
-### add tags to the request {{tag_name}}
+### Variables
+##### add tags to the request {{tag_name}}
 ```
 POST /hackem.php HTTP/1.1
 Host: 127.0.0.1:8000
@@ -26,7 +30,7 @@ Cookie: secret={{fakecookie}}
 data={{some_data}}
 ```
 
-### use -R tagname=value
+##### use -R tagname=value
 ```
-go run *.go -r test.req -R fakecookie=blahblahcookieDATA -R some_data=this_is_some_randome_data
+go run *.go -file test.req -R fakecookie=blahblahcookieDATA -R some_data=this_is_some_randome_data
 ```

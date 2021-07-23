@@ -25,7 +25,7 @@ func main() {
 
 	flag.Var(&Replacers, "R", "Replace sting in request file. Use multiple times (-R infile=./test.txt will replace {{infile}} with ./test.txt)")
 	https := flag.Bool("https", false, "HTTPS request, defaults to HTTP")
-	reqFile := flag.String("r", "", "The request file to replay")
+	reqFile := flag.String("file", "", "The request file to replay")
 
 	flag.Parse()
 
