@@ -25,9 +25,6 @@ type RequestConfig struct {
 	RawBody     string
 	Scheme      string
 }
-type ParamSet map[string]string
-type HeaderSet map[string]string
-type Method string
 
 var (
 	Client *http.Client
@@ -54,6 +51,7 @@ func init() {
 
 }
 
+// CreateReq parses a *RequestConfig and returns a *http.Request ready for use in DoRequest, or error
 func CreateReq(reqConf *RequestConfig) (*http.Request, error) {
 	u, _ := url.ParseRequestURI(reqConf.Url)
 	urlStr := u.String()
@@ -75,6 +73,7 @@ func CreateReq(reqConf *RequestConfig) (*http.Request, error) {
 	return r, nil
 }
 
+// DoRequest takes a *http.request and makes the request. returns an http.response or an error.  proxy string is optional
 func DoRequest(r *http.Request, proxy string) (*http.Response, error) {
 	if proxy != "" {
 		proxyUrl, _ := url.Parse(proxy)
@@ -89,6 +88,7 @@ func DoRequest(r *http.Request, proxy string) (*http.Response, error) {
 	return resp, nil
 }
 
+// GetBodyString is a wrapper arround io.reader that will return a string from an http.request or http.response body, and replaces body content for use elsewhere.
 func GetReqBody(r *http.Request) io.ReadCloser   { return r.Body }
 func GetRespBody(r *http.Response) io.ReadCloser { return r.Body }
 func GetBodyString(rc io.ReadCloser) string {
@@ -102,6 +102,7 @@ func GetBodyString(rc io.ReadCloser) string {
 	return string(bodyBytes)
 }
 
+// DumpRawRequest dumps a burp style request to a file.
 func DumpRawRequest(req *http.Request, path string) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -128,18 +129,19 @@ func DumpRawRequest(req *http.Request, path string) {
 	w.Flush()
 }
 
-func DumpResponse(resp *http.Response) {
-
+// PrintResponse prints the full http response to stdout
+func PrintResponse(resp *http.Response) {
 	fmt.Println(resp.Proto, resp.Status)
 	for k, v := range resp.Header {
 		fmt.Println(k+":", strings.Join(v, "; "))
 	}
-	fmt.Println("\n")
+	fmt.Printf("\n\n")
 	fmt.Println(GetBodyString(resp.Body))
 
 }
 
-func ReadRawRequest(path string, scheme string, repl map[string]string) (*RequestConfig, error) {
+// ReadRawRequest parses a burp style request file and returns a *RequestConfig for use in CreateRequest
+func ReadRawRequest(path string, scheme string) (*RequestConfig, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return &RequestConfig{}, fmt.Errorf("could not open request file: %s", err)
@@ -148,8 +150,8 @@ func ReadRawRequest(path string, scheme string, repl map[string]string) (*Reques
 
 	r := bufio.NewReader(file)
 
-	s, err :=r.ReadString('\n')
-	s = ReplaceVars(s,repl)
+	s, err := r.ReadString('\n')
+
 	if err != nil {
 		return &RequestConfig{}, fmt.Errorf("could not read request: %s", err)
 	}
@@ -171,7 +173,6 @@ func ReadRawRequest(path string, scheme string, repl map[string]string) (*Reques
 	for {
 		line, err := r.ReadString('\n')
 		line = strings.TrimSpace(line)
-		line = ReplaceVars(line,repl)
 
 		if err != nil || line == "" {
 			break
@@ -192,8 +193,6 @@ func ReadRawRequest(path string, scheme string, repl map[string]string) (*Reques
 		conf.Headers[strings.TrimSpace(p[0])] = strings.TrimSpace(p[1])
 	}
 
-	// Handle case with the full http url in path. In that case,
-	// ignore any host header that we encounter and use the path as request URL
 	var tmpUrl string
 	if strings.HasPrefix(parts[1], "http") {
 		parsed, err := url.Parse(parts[1])
@@ -216,15 +215,12 @@ func ReadRawRequest(path string, scheme string, repl map[string]string) (*Reques
 		}
 	}
 
-	// Set the request body
 	b, err := ioutil.ReadAll(r)
-	b = []byte(ReplaceVars(string(b),repl))
 	if err != nil {
 		return &RequestConfig{}, fmt.Errorf("could not read request body: %s", err)
 	}
 	conf.RawBody = string(b)
 
-	// Remove newline (typically added by the editor) at the end of the file
 	if strings.HasSuffix(conf.RawBody, "\r\n") {
 		conf.RawBody = conf.RawBody[:len(conf.RawBody)-2]
 	} else if strings.HasSuffix(conf.RawBody, "\n") {
@@ -244,11 +240,21 @@ func ReadRawRequest(path string, scheme string, repl map[string]string) (*Reques
 	return &conf, nil
 }
 
-func ReplaceVars(content string, repl map[string]string) string {
-	var ret string
-	ret = content
-	for k, v := range repl {
-		ret = strings.ReplaceAll(ret, "{{"+k+"}}", v)
+// ReplaceVars handles parsing a *RequestConfig and replaces any variables in the repl map. returns a modified *RequestConfig
+func (rc *RequestConfig) ReplaceVars(repl map[string]string) *RequestConfig {
+	for varname, value := range repl {
+		for hk, hv := range rc.Headers {
+			rc.Headers[hk] = strings.ReplaceAll(hv, "{{"+varname+"}}", value)
+		}
+		for qk, qv := range rc.Query {
+			rc.Query[qk] = strings.ReplaceAll(qv, "{{"+varname+"}}", value)
+		}
+		for pk, pv := range rc.Query {
+			rc.Params[pk] = strings.ReplaceAll(pv, "{{"+varname+"}}", value)
+		}
+		rc.Url = strings.ReplaceAll(rc.Url, "{{"+varname+"}}", value)
+		rc.RawBody = strings.ReplaceAll(rc.RawBody, "{{"+varname+"}}", value)
+
 	}
-	return ret
+	return rc
 }
